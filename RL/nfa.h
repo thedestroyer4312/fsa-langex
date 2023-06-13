@@ -7,7 +7,4 @@ namespace FSA{
     public:
         bool evaluate() const;
     };
-
-    // Explicit template instantiation - compile time interface
-    template class RL_FSA<NFA>;
 };
