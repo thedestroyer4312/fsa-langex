@@ -12,8 +12,6 @@ namespace FSA{
         FSA_type fsa;
 
     public:
-        // TBD: make notes on using the implicit constructors here
-
         // Construct RL_FSA from given underlying FSA
         RL_FSA(FSA_type&& fsa_in) : fsa(std::forward<FSA_type>(fsa_in)) {}
 

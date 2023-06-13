@@ -13,6 +13,10 @@
 #include "rl_fsa.h"
 
 namespace FSA{
+    /* Deterministic Finite Automaton
+     * Immutable DFA class built with recursive construction in mind
+     * Implements the RL_FSA interface (see rl_fsa.h)
+     */
     class DFA{
     private:
         struct Node{
@@ -52,15 +56,24 @@ namespace FSA{
 
         bool evaluate(std::string_view s) const;
 
-        template <typename Iterator,
-            typename value_type = std::iterator_traits<Iterator>::value_type,
-            std::enable_if_t<std::is_convertible<value_type, char>::value>>
+        template <typename Iterator>
         bool evaluate(Iterator begin, Iterator end) const;
 
         // Core interface methods for RL_FSA
         // For detailed descriptions, see RL_FSA class definition (rl_fsa.h)
         // Union, intersection, concatenation, complement, kleene star
-        
+        DFA intersection(const DFA& other) const;
+        DFA union_or(const DFA& other) const;
+        DFA kleene_star() const;
+        DFA concatenate(const DFA& other) const;
+        DFA complement() const;
+
+        /*
+         * Optional in terms of interface, but doubtless to be highly useful
+         * Applies Myphill-Nerode theorem to minimize DFA states which reduce
+         * memory usage and execution time
+         */
+        DFA minimize_states() const;
     };
 };
 
@@ -80,9 +93,7 @@ namespace FSA{
         states.push_back(state);
     }
 
-    template <typename Iterator,
-        typename value_type,
-        std::enable_if_t<std::is_convertible<value_type, char>::value>>
+    template <typename Iterator>
     bool DFA::evaluate(Iterator begin, Iterator end) const{
         const Node* curr_node = start_state;
         
@@ -98,8 +109,7 @@ namespace FSA{
     }
 
     bool DFA::evaluate(std::string_view s) const{
-        // evaluate(s.cbegin(), s.cend());
-        return true;
+        return evaluate(s.cbegin(), s.cend());
     }
 
     const DFA::Node* DFA::delta(const Node* n, char c) const{
