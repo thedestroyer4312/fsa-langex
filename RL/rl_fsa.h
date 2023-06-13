@@ -12,7 +12,16 @@ namespace FSA{
         FSA_type fsa;
 
     public:
-        // Construct RL_FSA from given underlying FSA
+        // Constructors & destructor, assignments - use defaults
+        RL_FSA() = default;
+        RL_FSA(const RL_FSA&) = default;
+        RL_FSA(RL_FSA&&) = default;
+        ~RL_FSA() = default;
+        &RL_FSA operator=(const RL_FSA&) = default;
+        &RL_FSA operator=(RL_FSA&&) = default;
+        
+        // Constructor given underlying FSA
+        // Due to template types, apply perfect forwarding
         RL_FSA(FSA_type&& fsa_in) : fsa(std::forward<FSA_type>(fsa_in)) {}
 
         // Perform whole string matching on the FSA

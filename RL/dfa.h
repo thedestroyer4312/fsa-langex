@@ -1,13 +1,8 @@
 #pragma once
 
-#include <algorithm>
-#include <iterator>
 #include <memory>
-#include <stdexcept>
 #include <string_view>
-#include <type_traits>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #include "rl_fsa.h"
@@ -42,20 +37,23 @@ namespace FSA{
         std::unordered_map<const Node*, std::unordered_map<char, const Node*>> transitions;
         const Node* start_state;
         
-        // Helper methods
         /* Delta function helper
          * If the input state and character combination is found, returns next state
          * Otherwise, returns nullptr (i.e. reject the state)
          */
         const Node* delta(const Node* n, char c) const;
-        void config_empty_string();
 
     public:
-        // Empty DFA recognizes empty string
-        DFA();
+        // Constructors & destructor, assignments - use defaults
+        // Note: a default-constructed DFA accepts no strings i.e. the language is empty set
+        DFA() : start_state(nullptr) {}
+        DFA(const DFA&) = default;
+        DFA(DFA&&) = default;
+        ~DFA() = default;
+        DFA& operator=(const DFA&) = default;
+        DFA& operator=(DFA&&) = default;
 
         bool evaluate(std::string_view s) const;
-
         template <typename Iterator>
         bool evaluate(Iterator begin, Iterator end) const;
 
@@ -74,30 +72,26 @@ namespace FSA{
          * memory usage and execution time
          */
         DFA minimize_states() const;
+
+        // Blanks the DFA so that its language is empty set once more
+        void clear();
+        
+        // Returns DFA whose language is {""} i.e. only accepts empty string
+        // This is not the same as default-constructed DFA because that also rejects empty string
+        static DFA empty_string();
+
+        // Other declarations
+        friend DFA cross_product_construction(const DFA&, const DFA&, bool);
     };
 };
 
-// Method implementations
+// Template method implementations (others are in .cpp)
 namespace FSA{
-    DFA::DFA(){
-        config_empty_string();
-    }
-
-    void DFA::config_empty_string(){
-        // Initializes a NEW DFA to only accept the empty string
-        // We do this by creating one accept state with no transitions
-        auto state = std::make_shared<Node>(true);
-        
-        // Add to states and set as start state
-        start_state = state.get();
-        states.push_back(state);
-    }
-
     template <typename Iterator>
     bool DFA::evaluate(Iterator begin, Iterator end) const{
         const Node* curr_node = start_state;
         
-        // Trace through DFA
+        // Step through DFA
         // If string is finished or curr_node is null, break
         while(begin != end && curr_node){
             char c = *begin; 
@@ -106,34 +100,5 @@ namespace FSA{
         }
 
         return curr_node && curr_node->is_accept;
-    }
-
-    bool DFA::evaluate(std::string_view s) const{
-        return evaluate(s.cbegin(), s.cend());
-    }
-
-    const DFA::Node* DFA::delta(const Node* n, char c) const{
-        // If Node n and character c are both present, return next state
-        // Otherwise, return nullptr
-        
-        // Pain in the butt, but we have to do this because const method
-        // cannot use operator[], do manual iterator searching
-        const Node* result = nullptr;
-        
-        // First, check to see if state n has a transition table
-        auto state_transitions_it = transitions.find(n);
-        if(state_transitions_it != transitions.cend()){
-            // Retrieve transition table
-            const auto& state_transitions = state_transitions_it->second;
-
-            // Now, check to see if the transition table for n has an entry for character c
-            auto next_state_it = state_transitions.find(c);
-            if(next_state_it != state_transitions.cend()){
-                // So, there is an appropriate next state. Return it
-                result = next_state_it->second;
-            }
-        }
-
-        return result;
     }
 };
