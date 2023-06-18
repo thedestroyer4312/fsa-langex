@@ -1,6 +1,6 @@
 #pragma once
 
-#include <memory>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -13,40 +13,38 @@ namespace FSA{
      * Implements the RL_FSA interface (see rl_fsa.h)
      */
     class DFA{
-    private:
-        struct Node{
-            bool is_accept;
-            Node(bool is_accept_in = false) : is_accept(is_accept_in) {}
-        };
+    public:
+        using node_id_t = size_t;
+
+        // node -> char -> node
+        using transition_tb_t = std::unordered_map<
+            node_id_t,
+            std::unordered_map<char, node_id_t>
+        >;
 
     private:
         // A DFA = (Q, Sigma, delta, q0, F)
-        // Q - set of states. Encoded in `states`
+        // Q - set of states. Described by `num_states`
         // Sigma - alphabet. Implicitly `char`
         // delta - Transition function. delta: Q x Sigma -> Q
         // If the state or character input is not found, treat as automatic reject
         // q0 - Starting state. q0 in Q
-        // F - Subset of Q, tates that are accepting. Encoded in each node
+        // F - Subset of Q, states that are accepting. Encoded in `accept_states`
+        size_t num_states;
+        transition_tb_t transitions;
+        std::vector<bool> accept_states;
+        node_id_t start_state;
 
-        // Note: we choose shared_ptr over unique_ptr because of copy constructors/copy assignment
-        // In that case, no copy of pointers is needed - simply reference already existing ones
-        // This works because transition functions map a subset (or equal to) the `states`
-        // that, with shared_ptr, are guaranteed to exist whereas unique_ptr requires manual deep copying
-        // Thus, it reduces coding complexity and memory usage
-        std::vector<std::shared_ptr<Node>> states;
-        std::unordered_map<const Node*, std::unordered_map<char, const Node*>> transitions;
-        const Node* start_state;
-        
         /* Delta function helper
          * If the input state and character combination is found, returns next state
          * Otherwise, returns nullptr (i.e. reject the state)
          */
-        const Node* delta(const Node* n, char c) const;
+        std::optional<node_id_t> delta(node_id_t id, char c) const;
 
     public:
         // Constructors & destructor, assignments - use defaults
         // Note: a default-constructed DFA accepts no strings i.e. the language is empty set
-        DFA() : start_state(nullptr) {}
+        DFA() = default;
         DFA(const DFA&) = default;
         DFA(DFA&&) = default;
         ~DFA() = default;
@@ -89,16 +87,34 @@ namespace FSA{
 namespace FSA{
     template <typename Iterator>
     bool DFA::evaluate(Iterator begin, Iterator end) const{
-        const Node* curr_node = start_state;
-        
-        // Step through DFA
-        // If string is finished or curr_node is null, break
-        while(begin != end && curr_node){
-            char c = *begin; 
-            curr_node = delta(curr_node, c);
-            ++begin;
-        }
+        bool result = false;
 
-        return curr_node && curr_node->is_accept;
+        // Empty DFA accepts no strings
+        if(num_states != 0){
+            node_id_t curr_node = start_state;
+
+            // Step through DFA
+            // If string is finished or curr_node is invalid, break)
+            while(begin != end){
+                char c = *begin;
+                std::optional<node_id_t> next_node = delta(curr_node, c);
+
+                if(next_node.has_value()){
+                    curr_node = *next_node;
+                }else{
+                    // delta() returns no transition -> automatic reject
+                    // by our convention (like NFA)
+                    break;
+                }
+
+                ++begin;
+            }
+
+            // Accept conditions:
+            // 1. string must be fully evaluated (begin = end)
+            // 2. must have ended on an accepting state
+            result = (begin == end) && accept_states[curr_node];
+        }
+        return result;
     }
 };
