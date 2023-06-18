@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <iterator>
 #include <stdexcept>
 #include <set>
@@ -12,9 +13,9 @@ namespace FSA{
         using node_id = DFA::node_id_t;
         using transition_tb_t = DFA::transition_tb_t;
         // `transition_tb_entry_t` is the type of the entries in `transition_tb_t`
-        using transition_tb_entry_t = transition_tb_t::value_type; // std::pair<node_id, std::unordered_map<char, node_id>>;
+        using transition_tb_entry_t = DFA::transition_tb_t::value_type; // std::pair<node_id, std::unordered_map<char, node_id>>;
         // `state_transition_tb_t` is the table mapping char -> node for a given state q
-        using state_transition_tb_t = transition_tb_t::mapped_type; // std::unordered_map<char, node_id>;
+        using state_transition_tb_t = DFA::transition_tb_t::mapped_type; // std::unordered_map<char, node_id>;
         using state_transition_tb_entry_t = state_transition_tb_t::value_type; // std::pair<node_id, char>;
 
         // Note: retrieves index in sorted ascending order
@@ -62,7 +63,11 @@ namespace FSA{
         }
 
         // Used in cross_product_construction()
-        transition_tb_t construct_delta_intersection(const transition_tb_t& tb_a, const transition_tb_t& tb_b, size_t SB){
+        transition_tb_t construct_delta_intersection(
+            const transition_tb_t& tb_a,
+            const transition_tb_t& tb_b,
+            std::function<node_id(node_id, node_id)> flatten_indices)
+        {
             transition_tb_t out;
 
             // Add only the shared transitions i.e. delta'((q_a, q_b), c) = (delta1(q_a, c), delta2(q_b, c))
@@ -92,13 +97,13 @@ namespace FSA{
                     );
 
                     // Now, iterate over the shared characters
-                    node_id q_prime = (q_a * SB) + q_b;
+                    node_id q_prime = flatten_indices(q_a, q_b);
                     for(char c : shared_characters){
                         // Compute delta1(q_a, c) and delta2(q_b, c)
-                        node_id qa_result = qa_state_transition_tb.find(c)->second;
-                        node_id qb_result = qb_state_transition_tb.find(c)->second;
+                        node_id qa_result = qa_state_transition_tb.at(c);
+                        node_id qb_result = qb_state_transition_tb.at(c);
 
-                        node_id q_prime_result = (qa_result * SB) + qb_result;
+                        node_id q_prime_result = flatten_indices(qa_result, qb_result);
 
                         // delta'((q_a, q_b), c) = (delta1(q_a, c), delta2(q_b, c))
                         out[q_prime][c] = q_prime_result;
@@ -106,34 +111,14 @@ namespace FSA{
                 }
             }
 
-
-            // For each entry (node, char -> node) in the transition table,
-            for(const transition_tb_entry_t& qa_transition_tb_entry : tb_a){
-                // Retrieve the state transition table (char -> node) for q_a
-                const state_transition_tb_t& qa_transition_tb = qa_transition_tb_entry.second;
-                // For each entry (char, node) in the state transition table
-                for(const state_transition_tb_entry_t& qa_transition : qa_transition_tb){
-                    
-                    // Now, loop over M2
-
-                    // For each entry (node, char -> node) in the transition table,
-                    for(const transition_tb_entry_t& qb_transition_tb_pair : tb_b){
-                        // Retrieve the state transition table (char -> node) for q_b
-                        const state_transition_tb_t& qb_transition_tb = qb_transition_tb_pair.second;
-                        for(const state_transition_tb_entry_t& qb_transition : qb_transition_tb){
-                            // delta'((q_a, q_b), c) = (delta1(q_a, c), delta2(q_b, c))
-
-                            node_id q_a = qa_transition_tb_entry.first;
-                            node_id q_b = qb_transition_tb_pair.first;
-                        }
-                    }
-                }
-            }
-
             return out;
         }
 
-        transition_tb_t construct_delta_union(const transition_tb_t& tb_a, const transition_tb_t& tb_b){
+        transition_tb_t construct_delta_union(
+            const transition_tb_t& tb_a,
+            const transition_tb_t& tb_b,
+            std::function<node_id(node_id, node_id)> flatten_indices)
+        {
             transition_tb_t out;
             // Double nested loop over each transition table
             // i.e. one for all valid delta1() with any delta2() and one for valid delta2() with any delta1()
@@ -160,6 +145,13 @@ namespace FSA{
         size_t S2 = M2.num_states;
         M_prime.num_states = S1 * S2;
 
+        // Helper function to compute flattened indices:
+        // (a, b) := (a * S2) + b
+        std::function<node_id(node_id, node_id)> flatten_indices(
+            [=](node_id a, node_id b) constexpr -> node_id {
+                return (a * S2) + b;
+        });
+
         // Now, construct delta'
         // Nested-for iterate over both tables
         // In intersection, if one state is invalid (i.e. nonexistent transition), automatic reject (no transition needed)
@@ -167,18 +159,17 @@ namespace FSA{
         // As such, union requires extra transitions to be added for all states (q_a, q_b) where one of q_a or q_b is not invalid
 
         if(intersection_construction){
-            M_prime.transitions = construct_delta_intersection(M1.transitions, M2.transitions, S2);
+            M_prime.transitions = construct_delta_intersection(M1.transitions, M2.transitions, flatten_indices);
         }else{
-            M_prime.transitions = construct_delta_union(M1.transitions, M2.transitions);
+            M_prime.transitions = construct_delta_union(M1.transitions, M2.transitions, flatten_indices);
         }
-        
 
         // Construct q0' = (q0_1, q0_2)
         node_id q0_1 = M1.start_state;
         node_id q0_2 = M2.start_state;
 
         // Compute and assign flattened index i'. (i1, i2) -> i' = (i1 * S2) + i2    
-        node_id i_prime = (q0_1 * S2) + q0_2;
+        node_id i_prime = flatten_indices(q0_1, q0_2);
         M_prime.start_state = i_prime;
 
         // Finally, compute F' using the indices of accepting states
@@ -193,7 +184,7 @@ namespace FSA{
             for(node_id i_qa : M1_accept_indices){
                 for(node_id i_qb : M2_accept_indices){
                     // Compute flattened index: (i1, i2) -> i' = (i1 * S2) + i2
-                    node_id i_prime = (i_qa * S2) + i_qb;
+                    node_id i_prime = flatten_indices(i_qa, i_qb);
                     M_prime.accept_states[i_prime] = true;
                 }
             }
@@ -209,14 +200,14 @@ namespace FSA{
             for(size_t i_qa : M1_accept_indices){
                 for(size_t j = 0; j < S2; j++){
                     // (q_a, j)
-                    node_id i_prime = (i_qa * S2) + j;
+                    node_id i_prime = flatten_indices(i_qa, j);
                     M_prime.accept_states[i_prime] = true;
                 }
             }
             for(size_t i_qb : M2_accept_indices){
                 for(size_t i = 0; i < S1; i++){
                     // (i, q_b)
-                    node_id i_prime = (i * S2) + i_qb;
+                    node_id i_prime = flatten_indices(i, i_qb);
                     M_prime.accept_states[i_prime] = true;
                 }
             }
@@ -257,25 +248,26 @@ namespace FSA{
         return cross_product_construction(*this, other, true);
     }
 
+    DFA DFA::complement() const{
+        // Simply flip the accepting and reject states
+        DFA comp = *this;
+        comp.accept_states.flip();
+        return comp;
+    }
+
     std::optional<DFA::node_id_t> DFA::delta(node_id_t id, char c) const{
         // If Node n and character c are both present, return next state
         // Otherwise, return null
         
-        // Pain in the butt, but we have to do this because const method
-        // cannot use operator[], do manual iterator searching
         std::optional<node_id_t> result;
         
         // First, check to see if state n has a transition table
-        auto n_transition_tb_it = transitions.find(id);
-        if(n_transition_tb_it != transitions.cend()){
-            // Retrieve transition table
-            const auto& n_transition_tb = n_transition_tb_it->second;
-
-            // Now, check to see if the transition table for n has an entry for character c
-            auto next_state_it = n_transition_tb.find(c);
-            if(next_state_it != n_transition_tb.cend()){
-                // So, there is an appropriate next state. Return it
-                result = next_state_it->second;
+        if(transitions.count(id)){
+            const state_transition_tb_t& n_transition_tb = transitions.at(id);
+            
+            // Now, check to see if state transition table has entry for character c
+            if(n_transition_tb.count(c)){
+                result = n_transition_tb.at(c);
             }
         }
 
