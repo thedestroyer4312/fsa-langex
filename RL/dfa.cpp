@@ -117,11 +117,52 @@ namespace FSA{
         transition_tb_t construct_delta_union(
             const transition_tb_t& tb_a,
             const transition_tb_t& tb_b,
-            std::function<node_id(node_id, node_id)> flatten_indices)
-        {
-            transition_tb_t out;
+            std::function<node_id(node_id, node_id)> flatten_indices,
+            size_t SA,
+            size_t SB
+        )
+        {   
+            // Use the delta intersection function for both valid transitions so we only have to do non-valids
+            transition_tb_t out = construct_delta_intersection(tb_a, tb_b, flatten_indices);
+
             // Double nested loop over each transition table
             // i.e. one for all valid delta1() with any delta2() and one for valid delta2() with any delta1()
+
+            // For each q_a in Q_a (valid, that is)
+            for(const transition_tb_entry_t& qa_transition_tb_entry : tb_a){
+                node_id q_a = qa_transition_tb_entry.first;
+                const state_transition_tb_t& qa_state_transition_tb = qa_transition_tb_entry.second;
+                
+                // Loop over characters c in delta1(q_a, c)
+                for(const state_transition_tb_entry_t& qa_state_transition_tb_entry : qa_state_transition_tb){
+                    char c = qa_state_transition_tb_entry.first;
+                    node_id qa_result = qa_state_transition_tb_entry.second;
+
+                    // For any q_b in Q_b (only handle invalid, valid already handled)
+                    for(size_t j = 0; j < SB; j++){
+                        // Valid means delta1(q_a, c) and delta2(q_b, c) are both defined
+                        // So, q_b and c must be in the domain of the delta2 function
+                        node_id q_b = j;
+
+                        if(tb_b.count(q_b) && tb_b.at(q_b).count(c)){
+                            continue;
+                        }
+
+                        // Now we know for sure that delta2(q_b, c) is undefined here
+                        // delta'((q_a, q_b), c) = (delta1(q_a, c), delta2(q_b, c))
+                        
+                    }
+                }
+            }
+
+            // For each q_b in Q_b (valid, that is)
+            for(const transition_tb_entry_t& qb_transition_tb_entry : tb_b){
+                node_id q_b = qb_transition_tb_entry.first;
+                const state_transition_tb_t& qb_state_transition_tb = qb_transition_tb_entry.second;
+
+                // For any q_a in Q_b (valid or not)
+            }
+
             return out;
         }
     };
@@ -161,7 +202,7 @@ namespace FSA{
         if(intersection_construction){
             M_prime.transitions = construct_delta_intersection(M1.transitions, M2.transitions, flatten_indices);
         }else{
-            M_prime.transitions = construct_delta_union(M1.transitions, M2.transitions, flatten_indices);
+            M_prime.transitions = construct_delta_union(M1.transitions, M2.transitions, flatten_indices, S1, S2);
         }
 
         // Construct q0' = (q0_1, q0_2)

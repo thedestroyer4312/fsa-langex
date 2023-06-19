@@ -55,14 +55,16 @@ namespace FSA{
         template <typename Iterator>
         bool evaluate(Iterator begin, Iterator end) const;
 
-        // Core interface methods for RL_FSA
+        // Core interface methods needed for RL_FSA
         // For detailed descriptions, see RL_FSA class definition (rl_fsa.h)
-        // Union, intersection, concatenation, complement, kleene star
+        // Union, intersection, complement
         DFA intersection(const DFA& other) const;
         DFA union_or(const DFA& other) const;
-        DFA kleene_star() const;
-        DFA concatenate(const DFA& other) const;
         DFA complement() const;
+
+        // Kleene star and concatenation are not included for DFA
+        // because constructing DFAs for them is very complex in the general case
+        // So, we will use NFAs for them instead and convert DFA <-> NFA as needed
 
         /*
          * Optional in terms of interface, but doubtless to be highly useful
